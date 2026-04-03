@@ -1,6 +1,12 @@
 # BDB MCP bridge (Codex CLI + AWS App Runner)
 
-## Primary behavior: Codex CLI (`ROUTER_MODE=codex_cli`, default)
+## Default behavior: Python MCP + OpenAI (`ROUTER_MODE=openai_api`, default)
+
+**AWS App Runner (managed Python)** has no **Codex CLI** (no Node/npm). The default **`openai_api`** mode uses the embedded MCP client + OpenAI tool routing.
+
+## Optional: Codex CLI (`ROUTER_MODE=codex_cli`)
+
+Use when the **`codex` binary is on `PATH`** (e.g. **Dockerfile** deployment with `npm install -g @openai/codex`). Set **`ROUTER_MODE=codex_cli`** in the environment.
 
 1. Obtains a **Bearer token** from Cisco BDB Duo OAuth (`client_credentials`).
 2. Writes a per-request **[Codex `config.toml`](https://developers.openai.com/codex/mcp)** that registers your BDB MCP endpoint as **streamable HTTP** with:
@@ -11,9 +17,9 @@
 
 This matches OpenAI’s documented pattern: configure MCP in `config.toml`, then use `codex exec` in CI/automation with `CODEX_API_KEY`. See [Non-interactive mode](https://developers.openai.com/codex/noninteractive) and [Codex MCP](https://developers.openai.com/codex/mcp).
 
-### Fallback: Python MCP + OpenAI function calling
+### Same stack without Codex
 
-Set **`ROUTER_MODE=openai_api`** to skip Codex CLI and use the embedded Python MCP client plus OpenAI tool routing (useful if `codex exec` cannot run in your environment).
+**`ROUTER_MODE=openai_api`** (default) — Python MCP SDK + OpenAI function calling; no `codex` binary required.
 
 ## Install Codex CLI (local dev)
 
@@ -31,7 +37,7 @@ Authentication for `codex exec` uses **`CODEX_API_KEY`** (or this app maps **`OP
 | `CLIENT_ID_BDB` | Yes | Duo OAuth client id. |
 | `CLIENT_SECRET_BDB` | Yes | Duo OAuth client secret (secret in App Runner). |
 | `CODEX_API_KEY` or `OPENAI_API_KEY` or `API_KEY_LLM` | Yes | API key for **`codex exec`** (same as OpenAI API key for default provider). |
-| `ROUTER_MODE` | No | `codex_cli` (default) or `openai_api`. |
+| `ROUTER_MODE` | No | `openai_api` (default, App Runner Python) or `codex_cli` (Docker / machine with Codex CLI). |
 | `MCP_BASE_URL` | No | Default: `https://scripts.cisco.com/api/v2/mcp/namespace/wxcc_mcp_2` |
 | `BDB_TOKEN_URL` | No | Default Duo token URL from your integration. |
 | `ORG_ID` | No | Passed via `env_http_headers` → `X-Org-Id` when set. |
@@ -110,7 +116,7 @@ Or commit the repo’s **`apprunner.yaml`** and set **Configuration source** to 
 
 **If the build step still fails**, open the deployment **build log** in App Runner and find the **`pip`** error line (missing compiler, package build failure, etc.). This repo uses plain **`uvicorn`** (not `uvicorn[standard]`) to reduce native-extension failures on App Runner build hosts.
 
-**Important:** The managed Python runtime **does not include Node.js or Codex CLI**. For GitHub → Python 3.11 deployments, set **`ROUTER_MODE=openai_api`** so the service uses the Python MCP client + OpenAI tool routing. To run **`ROUTER_MODE=codex_cli`**, deploy the **`Dockerfile`** (Option A).
+**Important:** The managed Python runtime **does not include Node.js or Codex CLI**. The app **defaults to `ROUTER_MODE=openai_api`**. To use **Codex CLI**, deploy the **`Dockerfile`** (Option A) and set **`ROUTER_MODE=codex_cli`**.
 
 ### Troubleshooting
 

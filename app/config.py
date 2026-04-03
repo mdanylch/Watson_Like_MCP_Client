@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     openai_base_url: str | None = Field(default=None, validation_alias="OPENAI_BASE_URL")
     router_model: str = Field(default="gpt-4o-mini", validation_alias="ROUTER_MODEL")
 
-    # Primary path: Codex CLI with MCP configured in generated config.toml (see OpenAI Codex MCP docs)
+    # codex_cli needs the Codex binary (e.g. Dockerfile). App Runner managed Python has no Node/npm — use openai_api there.
     router_mode: Literal["codex_cli", "openai_api"] = Field(
-        default="codex_cli",
+        default="openai_api",
         validation_alias="ROUTER_MODE",
     )
     codex_binary: str = Field(default="codex", validation_alias="CODEX_BINARY")
