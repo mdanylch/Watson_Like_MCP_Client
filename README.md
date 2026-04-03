@@ -83,10 +83,41 @@ docker run --rm -p 8080:8080 ^
 
 ## AWS App Runner
 
-1. Build and push the image (includes Codex CLI).
-2. Configure the same environment variables; prefer secrets for `CLIENT_SECRET_BDB` and `CODEX_API_KEY`.
+### Option A — Container from `Dockerfile` (Codex CLI included)
+
+1. Build and push the image to ECR, or connect App Runner to **source** with **Dockerfile** as the build type.
+2. Set environment variables; use secrets for `CLIENT_SECRET_BDB` and `CODEX_API_KEY`.
 3. Health check: **`GET /health`**.
 4. Egress: Duo SSO, `scripts.cisco.com`, and OpenAI API endpoints used by Codex.
+
+### Option B — Managed **Python 3.11** runtime (GitHub source, no Docker)
+
+The App Runner Python **3.11** build image does **not** put `pip` on `PATH`. AWS documents using **`pip3`** and **`python3`** instead. See [Using the Python platform](https://docs.aws.amazon.com/apprunner/latest/dg/service-source-code-python.html).
+
+**Build command (console)** — use exactly:
+
+```text
+pip3 install -r requirements.txt
+```
+
+**Start command (console)** — use:
+
+```text
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+```
+
+Or commit the repo’s **`apprunner.yaml`** and set **Configuration source** to **Configuration file** so App Runner picks up `pip3` / `python3` automatically.
+
+**Important:** The managed Python runtime **does not include Node.js or Codex CLI**. For GitHub → Python 3.11 deployments, set **`ROUTER_MODE=openai_api`** so the service uses the Python MCP client + OpenAI tool routing. To run **`ROUTER_MODE=codex_cli`**, deploy the **`Dockerfile`** (Option A).
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|--------|----------------|
+| `pip: command not found` | Use **`pip3 install -r requirements.txt`**, not `pip`. |
+| Codex / MCP failures on Python runtime | Set **`ROUTER_MODE=openai_api`** or switch to Dockerfile deployment. |
+| **Web ACL** error in the console | Often an IAM/console issue loading AWS WAF association for the service, or no WAF attached. If you are not using WAF on App Runner, it is usually safe to ignore; otherwise ensure your user/role has `wafv2:GetWebACL` (and related) permissions. |
+| **Application logs** empty / slow | Logs appear after a healthy instance is running. Failed builds or crashing tasks delay log groups; CloudWatch can lag by a minute or two. |
 
 ### Testing on App Runner
 

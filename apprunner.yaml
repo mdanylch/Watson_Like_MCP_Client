@@ -1,0 +1,22 @@
+# AWS App Runner — source repo config (Python 3.11 managed runtime).
+# https://docs.aws.amazon.com/apprunner/latest/dg/service-source-code-python.html
+#
+# Python 3.11 uses the "revised" build: use pip3 / python3 (plain `pip` is not on PATH).
+#
+# In the App Runner console, set "Configuration source" to use this file from the repo,
+# or mirror these commands in Build / Start manually.
+
+version: 1.0
+runtime: python311
+
+build:
+  commands:
+    build:
+      - pip3 install -r requirements.txt
+
+run:
+  runtime-version: "3.11"
+  # Must match `network.port`. App Runner also sets env PORT to the same value.
+  command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+  network:
+    port: 8080
