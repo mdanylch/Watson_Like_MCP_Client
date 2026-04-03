@@ -94,19 +94,21 @@ docker run --rm -p 8080:8080 ^
 
 The App Runner Python **3.11** build image does **not** put `pip` on `PATH`. AWS documents using **`pip3`** and **`python3`** instead. See [Using the Python platform](https://docs.aws.amazon.com/apprunner/latest/dg/service-source-code-python.html).
 
-**Build command (console)** — use exactly:
+**Build command (console)** — same as [webex-cc-mcp](https://github.com/mdanylch/webex-cc-mcp):
 
 ```text
 pip3 install -r requirements.txt
 ```
 
-**Start command (console)** — use:
+**Start command (console)** — use the repo’s shell wrapper (installs deps again at runtime, which avoids common Python 3.11 “revised build” issues):
 
 ```text
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+sh start.sh
 ```
 
-Or commit the repo’s **`apprunner.yaml`** and set **Configuration source** to **Configuration file** so App Runner picks up `pip3` / `python3` automatically.
+Or commit the repo’s **`apprunner.yaml`** and set **Configuration source** to **Configuration file**.
+
+**If the build step still fails**, open the deployment **build log** in App Runner and find the **`pip`** error line (missing compiler, package build failure, etc.). This repo uses plain **`uvicorn`** (not `uvicorn[standard]`) to reduce native-extension failures on App Runner build hosts.
 
 **Important:** The managed Python runtime **does not include Node.js or Codex CLI**. For GitHub → Python 3.11 deployments, set **`ROUTER_MODE=openai_api`** so the service uses the Python MCP client + OpenAI tool routing. To run **`ROUTER_MODE=codex_cli`**, deploy the **`Dockerfile`** (Option A).
 

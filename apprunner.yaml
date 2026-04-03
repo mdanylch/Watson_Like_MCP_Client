@@ -3,8 +3,11 @@
 #
 # Python 3.11 uses the "revised" build: use pip3 / python3 (plain `pip` is not on PATH).
 #
-# In the App Runner console, set "Configuration source" to use this file from the repo,
-# or mirror these commands in Build / Start manually.
+# Console mirror (Configuration source: API), matching webex-cc-mcp:
+#   Build:  pip3 install -r requirements.txt
+#   Start:  sh start.sh
+#
+# `start.sh` re-runs pip at runtime (recommended for Python 3.11 revised build).
 
 version: 1.0
 runtime: python311
@@ -12,11 +15,11 @@ runtime: python311
 build:
   commands:
     build:
-      - pip3 install -r requirements.txt
+      - python3 -m pip install --upgrade pip setuptools wheel
+      - pip3 install --no-cache-dir -r requirements.txt
 
 run:
   runtime-version: "3.11"
-  # Must match `network.port`. App Runner also sets env PORT to the same value.
-  command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+  command: sh start.sh
   network:
     port: 8080
