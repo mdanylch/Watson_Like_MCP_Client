@@ -49,32 +49,54 @@ Authentication for `codex exec` uses **`CODEX_API_KEY`** (or this app maps **`OP
 | `ROUTER_MODEL` | No | Only used when `ROUTER_MODE=openai_api`. |
 | `ASSISTANT_FOLLOWUP` | No | Only used when `ROUTER_MODE=openai_api`. |
 | `PORT` | No | App Runner sets this; default `8080`. |
+| `EXPOSE_ERROR_DETAILS` | No | Default `false`. Set **`true`** while debugging so `/invoke` errors include `exception_type`, `exception_message`, and `traceback` in the JSON `detail` object. **Turn off in production** (tracebacks can leak context). |
 
 Per-request overrides: `POST /invoke` JSON may include `org_id` and `user_email`.
 
-## Local run
+## Run locally on Windows (PC)
 
-Install **Node.js** and **Codex CLI** (`npm i -g @openai/codex`), then:
+Default mode **`ROUTER_MODE=openai_api`** does **not** require Node or Codex—only Python and your API keys.
 
-```bash
+**1. Python 3.11+** and a project folder (this repo).
+
+**2. Virtualenv and dependencies**
+
+```powershell
+cd "C:\path\to\Watson_MCP_Client"
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-set CLIENT_ID_BDB=...
-set CLIENT_SECRET_BDB=...
-set CODEX_API_KEY=...
-
-uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
 
-Invoke:
+**3. Environment variables** (PowerShell session, or copy `env.example` to `.env` and fill values—`pydantic-settings` loads `.env` automatically):
 
-```bash
-curl -s -X POST http://127.0.0.1:8080/invoke ^
-  -H "Content-Type: application/json" ^
-  -d "{\"content\": \"Your task in natural language\"}"
+```powershell
+$env:CLIENT_ID_BDB = "your-client-id"
+$env:CLIENT_SECRET_BDB = "your-secret"
+$env:OPENAI_API_KEY = "sk-..."   # or CODEX_API_KEY / API_KEY_LLM
+$env:ROUTER_MODE = "openai_api"
+$env:EXPOSE_ERROR_DETAILS = "true"   # optional: full error JSON in responses while debugging
 ```
+
+**4. Start the API** (from repo root, venv active):
+
+```powershell
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8080
+```
+
+**5. Test**
+
+```powershell
+curl.exe -s http://127.0.0.1:8080/health
+
+curl.exe -s -X POST http://127.0.0.1:8080/invoke `
+  -H "Content-Type: application/json" `
+  -d "{\"content\": \"Your task\", \"org_id\": \"your-org\", \"user_email\": \"you@company.com\"}"
+```
+
+If `Invoke-WebRequest` is aliased as `curl`, use **`curl.exe`** so JSON is sent correctly.
+
+To use **Codex CLI** locally instead, install Node, run `npm i -g @openai/codex`, set **`ROUTER_MODE=codex_cli`**, and ensure `codex` is on `PATH`.
 
 ## Docker
 

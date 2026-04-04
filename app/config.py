@@ -65,6 +65,9 @@ class Settings(BaseSettings):
         description="If true, run a second LLM call to summarize tool results in natural language.",
     )
 
+    # When true, /invoke returns exception type + message in JSON (for local/debug). Turn off in untrusted production.
+    expose_error_details: bool = Field(default=False, validation_alias="EXPOSE_ERROR_DETAILS")
+
 
 @lru_cache
 def get_settings() -> Settings:
