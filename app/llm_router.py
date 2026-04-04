@@ -12,17 +12,18 @@ from app.mcp_tools import safe_json_loads_arguments
 
 
 SYSTEM_PROMPT = """You are a routing assistant for Cisco BDB MCP tools.
-Given the user message, call exactly the MCP tool(s) that best satisfy the request.
+Given the user message, call the MCP tool(s) that best satisfy the request when a tool applies.
 Use the tool definitions provided. Prefer a single tool call when one tool is enough.
-If required arguments are missing, infer reasonable values from context or use empty objects only when the schema allows."""
+If required arguments are missing, infer reasonable values from context or use empty objects only when the schema allows.
+If no listed tool can satisfy the request, answer briefly in plain text without calling tools (do not invent tool names)."""
 
 
 async def choose_tool_calls(
     settings: Settings,
     user_content: str,
     openai_tools: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Returns list of {name, arguments dict} from the model."""
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Returns (planned tool calls, optional text reply when the model chose not to call any tool)."""
     async with httpx.AsyncClient(verify=httpx_verify(settings)) as http_client:
         client = AsyncOpenAI(
             api_key=settings.openai_api_key,
@@ -44,15 +45,16 @@ async def choose_tool_calls(
         out: list[dict[str, Any]] = []
         if not message.tool_calls:
             text = (message.content or "").strip()
+            if text:
+                return [], text
             raise RuntimeError(
-                "The router model did not select a tool. "
-                f"Model reply (no tool_calls): {text[:500]}"
+                "The router model returned no tool calls and no assistant text."
             )
         for tc in message.tool_calls:
             fn = tc.function
             args = safe_json_loads_arguments(fn.arguments or "{}")
             out.append({"name": fn.name, "arguments": args})
-        return out
+        return out, None
 
 
 async def summarize_tool_results(

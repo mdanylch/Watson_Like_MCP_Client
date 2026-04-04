@@ -94,7 +94,18 @@ async def invoke_openai_mcp_pipeline(
                 raise RuntimeError("MCP server returned no tools")
 
             openai_tools = mcp_tools_to_openai_functions(tools)
-            planned = await choose_tool_calls(settings, content, openai_tools)
+            planned, router_text_reply = await choose_tool_calls(settings, content, openai_tools)
+
+            if router_text_reply is not None:
+                return {
+                    "mode": "openai_api",
+                    "tools_available": len(tools),
+                    "planned_calls": [],
+                    "router_text_reply": router_text_reply,
+                    "results": [],
+                    "assistant_summary": None,
+                    "note": "The model answered without calling MCP tools (no tool_calls).",
+                }
 
             results_serial: list[dict[str, Any]] = []
             for call in planned:
