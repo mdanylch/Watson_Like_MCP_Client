@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # When true, /invoke returns exception type + message in JSON (for local/debug)
     expose_error_details: bool = Field(default=False, validation_alias="EXPOSE_ERROR_DETAILS")
 
+    # When true, /invoke includes a ``diagnostics`` object (stderr, stdout sample, MCP hints) and logs detail
+    invoke_verbose_diagnostics: bool = Field(default=False, validation_alias="INVOKE_VERBOSE_DIAGNOSTICS")
+
     # TLS for httpx (Duo token fetch). Corporate SSL inspection often needs a PEM bundle.
     http_ssl_verify: bool = Field(default=True, validation_alias="HTTP_SSL_VERIFY")
     ssl_ca_bundle: str | None = Field(
