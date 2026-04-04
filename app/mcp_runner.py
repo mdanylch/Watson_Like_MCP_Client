@@ -45,6 +45,17 @@ def _extra_headers(
     return h
 
 
+def _effective_org_user(
+    settings: Settings,
+    org_id: str | None,
+    user_email: str | None,
+) -> tuple[str | None, str | None]:
+    """Same resolution as _extra_headers: request overrides env (ORG_ID / USER_EMAIL)."""
+    oid = org_id if org_id is not None else settings.org_id
+    em = user_email if user_email is not None else settings.user_email
+    return oid, em
+
+
 async def invoke_mcp_pipeline(
     settings: Settings,
     content: str,
@@ -52,19 +63,20 @@ async def invoke_mcp_pipeline(
     org_id: str | None = None,
     user_email: str | None = None,
 ) -> dict[str, Any]:
+    oid, em = _effective_org_user(settings, org_id, user_email)
     if settings.router_mode == "codex_cli":
         return await invoke_codex_mcp_pipeline(
             settings,
             content,
-            org_id=org_id,
-            user_email=user_email,
+            org_id=oid,
+            user_email=em,
         )
 
     return await invoke_openai_mcp_pipeline(
         settings,
         content,
-        org_id=org_id,
-        user_email=user_email,
+        org_id=oid,
+        user_email=em,
     )
 
 
