@@ -14,16 +14,39 @@ from app.mcp_tools import safe_json_loads_arguments
 SYSTEM_PROMPT = """You are a routing assistant for Cisco BDB MCP tools.
 Given the user message, call the MCP tool(s) that best satisfy the request when a tool applies.
 Use the tool definitions provided. Prefer a single tool call when one tool is enough.
+When the user message includes request metadata (org_id, user_email), you MUST pass those values in the tool call JSON arguments for every tool that lists them in its parameter schema.
 If required arguments are missing, infer reasonable values from context or use empty objects only when the schema allows.
 If no listed tool can satisfy the request, answer briefly in plain text without calling tools (do not invent tool names)."""
+
+
+def _augment_user_content_with_session(
+    user_content: str,
+    org_id: str | None,
+    user_email: str | None,
+) -> str:
+    if not org_id and not user_email:
+        return user_content
+    lines: list[str] = []
+    if org_id:
+        lines.append(f"org_id: {org_id}")
+    if user_email:
+        lines.append(f"user_email: {user_email}")
+    return (
+        f"{user_content}\n\n---\nRequest metadata (include in tool arguments when the tool schema requires them):\n"
+        + "\n".join(lines)
+    )
 
 
 async def choose_tool_calls(
     settings: Settings,
     user_content: str,
     openai_tools: list[dict[str, Any]],
+    *,
+    org_id: str | None = None,
+    user_email: str | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Returns (planned tool calls, optional text reply when the model chose not to call any tool)."""
+    augmented = _augment_user_content_with_session(user_content, org_id, user_email)
     async with httpx.AsyncClient(verify=httpx_verify(settings)) as http_client:
         client = AsyncOpenAI(
             api_key=settings.openai_api_key,
@@ -34,7 +57,7 @@ async def choose_tool_calls(
             model=settings.router_model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
+                {"role": "user", "content": augmented},
             ],
             tools=openai_tools,
             tool_choice="auto",

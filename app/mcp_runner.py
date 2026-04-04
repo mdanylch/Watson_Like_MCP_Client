@@ -12,7 +12,11 @@ from app.codex_runner import invoke_codex_mcp_pipeline
 from app.config import Settings
 from app.http_utils import mcp_httpx_client_factory
 from app.llm_router import choose_tool_calls, summarize_tool_results
-from app.mcp_tools import mcp_tools_to_openai_functions, tool_result_to_serializable
+from app.mcp_tools import (
+    inject_session_context_into_planned_calls,
+    mcp_tools_to_openai_functions,
+    tool_result_to_serializable,
+)
 
 
 class BearerAuth(httpx.Auth):
@@ -94,7 +98,16 @@ async def invoke_openai_mcp_pipeline(
                 raise RuntimeError("MCP server returned no tools")
 
             openai_tools = mcp_tools_to_openai_functions(tools)
-            planned, router_text_reply = await choose_tool_calls(settings, content, openai_tools)
+            planned, router_text_reply = await choose_tool_calls(
+                settings,
+                content,
+                openai_tools,
+                org_id=org_id,
+                user_email=user_email,
+            )
+            planned = inject_session_context_into_planned_calls(
+                planned, tools, org_id=org_id, user_email=user_email
+            )
 
             if router_text_reply is not None:
                 return {
