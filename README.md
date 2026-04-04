@@ -157,6 +157,7 @@ Or commit the repo’s **`apprunner.yaml`** and set **Configuration source** to 
 | Codex / MCP failures on Python runtime | Set **`ROUTER_MODE=openai_api`** or switch to Dockerfile deployment. |
 | **Web ACL** error in the console | Often an IAM/console issue loading AWS WAF association for the service, or no WAF attached. If you are not using WAF on App Runner, it is usually safe to ignore; otherwise ensure your user/role has `wafv2:GetWebACL` (and related) permissions. |
 | **Application logs** empty / slow | Logs appear after a healthy instance is running. Failed builds or crashing tasks delay log groups; CloudWatch can lag by a minute or two. |
+| **HTTP 429** / `insufficient_quota` / `RateLimitError` from OpenAI | Your **API key has no remaining quota** or billing is not enabled. Top up at [OpenAI billing](https://platform.openai.com/account/billing) or use another key / org project. |
 
 ### Testing on App Runner
 
