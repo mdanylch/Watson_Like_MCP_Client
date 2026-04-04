@@ -10,6 +10,7 @@ from mcp.types import CallToolResult
 from app.bdb_oauth import fetch_client_credentials_token
 from app.codex_runner import invoke_codex_mcp_pipeline
 from app.config import Settings
+from app.http_utils import mcp_httpx_client_factory
 from app.llm_router import choose_tool_calls, summarize_tool_results
 from app.mcp_tools import mcp_tools_to_openai_functions, tool_result_to_serializable
 
@@ -78,7 +79,12 @@ async def invoke_openai_mcp_pipeline(
     auth = BearerAuth(token)
     extra = _extra_headers(settings, org_id=org_id, user_email=user_email)
 
-    async with streamablehttp_client(url, headers=extra or None, auth=auth) as streams:
+    async with streamablehttp_client(
+        url,
+        headers=extra or None,
+        auth=auth,
+        httpx_client_factory=mcp_httpx_client_factory(settings),
+    ) as streams:
         read, write, _ = streams
         async with ClientSession(read, write) as session:
             await session.initialize()

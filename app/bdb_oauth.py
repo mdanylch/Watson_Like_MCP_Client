@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from app.config import Settings
+from app.http_utils import httpx_verify
 
 
 async def fetch_client_credentials_token(settings: Settings) -> str:
@@ -12,7 +13,7 @@ async def fetch_client_credentials_token(settings: Settings) -> str:
         "client_id": settings.client_id_bdb,
         "client_secret": settings.client_secret_bdb,
     }
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, verify=httpx_verify(settings)) as client:
         r = await client.post(
             settings.bdb_token_url,
             data=data,

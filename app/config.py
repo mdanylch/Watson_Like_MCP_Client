@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -67,6 +67,25 @@ class Settings(BaseSettings):
 
     # When true, /invoke returns exception type + message in JSON (for local/debug). Turn off in untrusted production.
     expose_error_details: bool = Field(default=False, validation_alias="EXPOSE_ERROR_DETAILS")
+
+    # TLS for httpx (Duo token, MCP streamable HTTP, OpenAI). Corporate SSL inspection often needs a PEM bundle.
+    http_ssl_verify: bool = Field(default=True, validation_alias="HTTP_SSL_VERIFY")
+    ssl_ca_bundle: str | None = Field(
+        default=None,
+        validation_alias="SSL_CA_BUNDLE",
+        description="Path to a PEM file with extra CA certs (e.g. corporate root). Used when HTTP_SSL_VERIFY is true.",
+    )
+
+    @field_validator("http_ssl_verify", mode="before")
+    @classmethod
+    def _coerce_http_ssl_verify(cls, v: object) -> bool:
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("1", "true", "yes", "on")
+        return bool(v)
 
 
 @lru_cache

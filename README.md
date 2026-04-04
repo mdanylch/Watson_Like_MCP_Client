@@ -50,6 +50,8 @@ Authentication for `codex exec` uses **`CODEX_API_KEY`** (or this app maps **`OP
 | `ASSISTANT_FOLLOWUP` | No | Only used when `ROUTER_MODE=openai_api`. |
 | `PORT` | No | App Runner sets this; default `8080`. |
 | `EXPOSE_ERROR_DETAILS` | No | Default `false`. Set **`true`** while debugging so `/invoke` errors include `exception_type`, `exception_message`, and `traceback` in the JSON `detail` object. **Turn off in production** (tracebacks can leak context). |
+| `HTTP_SSL_VERIFY` | No | Default `true`. Set **`false`** only if you hit **`CERTIFICATE_VERIFY_FAILED`** behind corporate SSL inspection (local dev). **Avoid in production.** |
+| `SSL_CA_BUNDLE` | No | Path to a **PEM** file with trusted CAs (e.g. corporate root + public roots). Prefer this over disabling verification when possible. |
 
 Per-request overrides: `POST /invoke` JSON may include `org_id` and `user_email`.
 
@@ -77,6 +79,11 @@ $env:OPENAI_API_KEY = "sk-..."   # or CODEX_API_KEY / API_KEY_LLM
 $env:ROUTER_MODE = "openai_api"
 $env:EXPOSE_ERROR_DETAILS = "true"   # optional: full error JSON in responses while debugging
 ```
+
+**Corporate network / SSL inspection:** If you see **`SSL: CERTIFICATE_VERIFY_FAILED`** or **`unable to get local issuer certificate`**, Python does not trust your intercept CA. Either:
+
+- Point **`SSL_CA_BUNDLE`** at a PEM that includes your org’s root (and public CAs if needed), or  
+- For quick local testing only: **`$env:HTTP_SSL_VERIFY = "false"`** (insecure; do not use in production).
 
 **4. Start the API** (from repo root, venv active):
 
