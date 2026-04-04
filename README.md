@@ -1,184 +1,73 @@
-# BDB MCP bridge (Codex CLI + AWS App Runner)
+# BDB MCP bridge (Codex CLI only)
 
-## Default behavior: Python MCP + OpenAI (`ROUTER_MODE=openai_api`, default)
+FastAPI service: **Duo OAuth** (client credentials) → writes **`~/.codex/config.toml`** in a temp home → runs **`codex exec --json`** so the [Codex CLI](https://developers.openai.com/codex/cli/) uses your BDB MCP server (streamable HTTP).
 
-**AWS App Runner (managed Python)** has no **Codex CLI** (no Node/npm). The default **`openai_api`** mode uses the embedded MCP client + OpenAI tool routing.
+**There are no separate REST routes for `tools/list` or `tools/call`.** Only **`POST /invoke`** runs Codex.
 
-## Optional: Codex CLI (`ROUTER_MODE=codex_cli`)
+## Requirements
 
-Use when the **`codex` binary is on `PATH`** (e.g. **Dockerfile** deployment with `npm install -g @openai/codex`). Set **`ROUTER_MODE=codex_cli`** in the environment.
+- Python 3.11+
+- **`codex` on PATH** — `npm install -g @openai/codex`
+- Env: `CLIENT_ID_BDB`, `CLIENT_SECRET_BDB`, `CODEX_API_KEY` (see `env.example`)
 
-1. Obtains a **Bearer token** from Cisco BDB Duo OAuth (`client_credentials`).
-2. Writes a per-request **[Codex `config.toml`](https://developers.openai.com/codex/mcp)** that registers your BDB MCP endpoint as **streamable HTTP** with:
-   - `bearer_token_env_var = "BDB_MCP_BEARER_TOKEN"` (runtime token)
-   - optional `env_http_headers` for `X-Org-Id` / `X-User-Email` (from `ORG_ID` / `USER_EMAIL` env or request body)
-3. Runs **`codex exec --json`** (non-interactive) so **Codex** plans work and invokes **MCP tools** on `scripts.cisco.com` through that configured server.
-4. Parses the JSON Lines stream and returns completed **`mcp_tool_call`** items plus the last **`agent_message`** when present.
-
-This matches OpenAI’s documented pattern: configure MCP in `config.toml`, then use `codex exec` in CI/automation with `CODEX_API_KEY`. See [Non-interactive mode](https://developers.openai.com/codex/noninteractive) and [Codex MCP](https://developers.openai.com/codex/mcp).
-
-### Same stack without Codex
-
-**`ROUTER_MODE=openai_api`** (default) — Python MCP SDK + OpenAI function calling; no `codex` binary required.
-
-## Install Codex CLI (local dev)
-
-```bash
-npm install -g @openai/codex
-codex --version
-```
-
-Authentication for `codex exec` uses **`CODEX_API_KEY`** (or this app maps **`OPENAI_API_KEY` / `API_KEY_LLM`** to both `CODEX_API_KEY` and `OPENAI_API_KEY` inside the process). See [Authenticate in CI](https://developers.openai.com/codex/noninteractive).
-
-## Environment variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `CLIENT_ID_BDB` | Yes | Duo OAuth client id. |
-| `CLIENT_SECRET_BDB` | Yes | Duo OAuth client secret (secret in App Runner). |
-| `CODEX_API_KEY` or `OPENAI_API_KEY` or `API_KEY_LLM` | Yes | API key for **`codex exec`** (same as OpenAI API key for default provider). |
-| `ROUTER_MODE` | No | `openai_api` (default, App Runner Python) or `codex_cli` (Docker / machine with Codex CLI). |
-| `MCP_BASE_URL` | No | Default: `https://scripts.cisco.com/api/v2/mcp/namespace/wxcc_mcp_2` |
-| `BDB_TOKEN_URL` | No | Default Duo token URL from your integration. |
-| `ORG_ID` | No | Passed via `env_http_headers` → `X-Org-Id` when set. |
-| `USER_EMAIL` | No | Passed via `env_http_headers` → `X-User-Email` when set. |
-| `CODEX_MCP_SERVER_NAME` | No | Config key / prompt name (default `bdb_wxcc`). Must match the name Codex sees in `config.toml`. |
-| `CODEX_EXEC_TIMEOUT_SEC` | No | Default `600`. |
-| `CODEX_SANDBOX` | No | `read-only` (default), `workspace-write`, or `danger-full-access`. |
-| `CODEX_BINARY` | No | Default `codex` (must be on `PATH`; Docker image installs via npm). |
-| `ROUTER_MODEL` | No | Only used when `ROUTER_MODE=openai_api`. |
-| `ASSISTANT_FOLLOWUP` | No | Only used when `ROUTER_MODE=openai_api`. |
-| `PORT` | No | App Runner sets this; default `8080`. |
-| `EXPOSE_ERROR_DETAILS` | No | Default `false`. Set **`true`** while debugging so `/invoke` errors include `exception_type`, `exception_message`, and `traceback` in the JSON `detail` object. **Turn off in production** (tracebacks can leak context). |
-| `HTTP_SSL_VERIFY` | No | Default `true`. Set **`false`** only if you hit **`CERTIFICATE_VERIFY_FAILED`** behind corporate SSL inspection (local dev). **Avoid in production.** |
-| `SSL_CA_BUNDLE` | No | Path to a **PEM** file with trusted CAs (e.g. corporate root + public roots). Prefer this over disabling verification when possible. |
-
-Per-request overrides: `POST /invoke` JSON may include `org_id` and `user_email`.
-
-## Run locally on Windows (PC)
-
-Default mode **`ROUTER_MODE=openai_api`** does **not** require Node or Codex—only Python and your API keys.
-
-**1. Python 3.11+** and a project folder (this repo).
-
-**2. Virtualenv and dependencies**
+## Run locally
 
 ```powershell
-cd "C:\path\to\Watson_MCP_Client"
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+uvicorn app.main:app --host 127.0.0.1 --port 8080
 ```
-
-**3. Environment variables** (PowerShell session, or copy `env.example` to `.env` and fill values—`pydantic-settings` loads `.env` automatically):
 
 ```powershell
-$env:CLIENT_ID_BDB = "your-client-id"
-$env:CLIENT_SECRET_BDB = "your-secret"
-$env:OPENAI_API_KEY = "sk-..."   # or CODEX_API_KEY / API_KEY_LLM
-$env:ROUTER_MODE = "openai_api"
-$env:EXPOSE_ERROR_DETAILS = "true"   # optional: full error JSON in responses while debugging
+Invoke-RestMethod -Uri "http://127.0.0.1:8080/invoke" -Method Post `
+  -ContentType "application/json; charset=utf-8" `
+  -Body (@{ content = "List WXCC address books for this org."; org_id = "YOUR-ORG-UUID" } | ConvertTo-Json -Depth 5 -Compress)
 ```
 
-**Corporate network / SSL inspection:** If you see **`SSL: CERTIFICATE_VERIFY_FAILED`** or **`unable to get local issuer certificate`**, Python does not trust your intercept CA. Either:
+Response includes **`parsed_jsonl`** from **`codex exec --json`**. Tool activity appears under **`mcp_tool_calls_completed`** when Codex actually emits MCP tool events.
 
-- Point **`SSL_CA_BUNDLE`** at a PEM that includes your org’s root (and public CAs if needed), or  
-- For quick local testing only: **`$env:HTTP_SSL_VERIFY = "false"`** (insecure; do not use in production).
+## Endpoints
 
-**Important:** `HTTP_SSL_VERIFY` must be set in the **same environment as the uvicorn process**. Setting it only in the PowerShell window where you run **`Invoke-RestMethod`** does **nothing** for the server. Either: (1) stop uvicorn, run `$env:HTTP_SSL_VERIFY = "false"`, start uvicorn again in **that** window; or (2) put `HTTP_SSL_VERIFY=false` in a **`.env`** file in the project root (loaded when the app starts). On startup, logs show **`HTTP_SSL_VERIFY=...`** so you can confirm.
+| Method | Path      | Description |
+|--------|-----------|-------------|
+| GET    | `/health` | Liveness |
+| POST   | `/invoke` | Body: `content`, optional `org_id`, `user_email` |
 
-**4. Start the API** (from repo root, venv active):
+## Troubleshooting: MCP + `codex exec` (production Codex client)
 
-```powershell
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8080
-```
+This app **does not** implement MCP inside Python. It only:
 
-**5. Test**
+1. Fetches an OAuth token and sets **`BDB_MCP_BEARER_TOKEN`** (and optional **`BDB_ORG_ID`** / **`BDB_USER_EMAIL`**).
+2. Writes **`[mcp_servers.<name>]`** in a temporary **`HOME`** with **`url`**, **`bearer_token_env_var`**, and optional **`env_http_headers`** (see [Codex MCP](https://developers.openai.com/codex/mcp)).
+3. Runs **`codex exec`** with that **`HOME`**.
 
-```powershell
-curl.exe -s http://127.0.0.1:8080/health
+If **`parsed_jsonl.mcp_tool_calls_completed`** is empty but you get short “Understood…” text, **Codex chose not to call tools** in that run. That is controlled by **Codex + your CLI version**, not by this bridge alone.
 
-curl.exe -s -X POST http://127.0.0.1:8080/invoke `
-  -H "Content-Type: application/json" `
-  -d "{\"content\": \"Your task\", \"org_id\": \"your-org\", \"user_email\": \"you@company.com\"}"
-```
+**Checklist (Codex-side):**
 
-If `Invoke-WebRequest` is aliased as `curl`, use **`curl.exe`** so JSON is sent correctly.
+1. **Upgrade Codex** — `npm update -g @openai/codex`; confirm **`codex exec --help`** matches the flags you set in **`CODEX_EXEC_EXTRA_ARGS`** (e.g. `--full-auto` only if supported).
+2. **Timeouts** — BDB may be slow. Tune **`MCP_STARTUP_TIMEOUT_SEC`** and **`MCP_TOOL_TIMEOUT_SEC`** in `.env` (written into `config.toml` as `startup_timeout_sec` / `tool_timeout_sec`).
+3. **TLS** — If token fetch works but MCP fails, set **`HTTP_SSL_VERIFY`** / **`SSL_CA_BUNDLE`** for the **server** process.
+4. **Same config manually** — Copy the generated pattern: run **`codex`** with **`HOME`** pointing at a dir that contains **`.codex/config.toml`** with your **`MCP_BASE_URL`**, **`BDB_MCP_BEARER_TOKEN`**, and headers — then run **`codex exec --json "…"`** in a shell. If tools still never run, the issue is **Codex ↔ MCP**, not FastAPI.
+5. **Upstream behavior** — Track **`@openai/codex`** releases and issues (e.g. `codex exec` vs interactive TUI differing on MCP tool dispatch).
 
-To use **Codex CLI** locally instead, install Node, run `npm i -g @openai/codex`, set **`ROUTER_MODE=codex_cli`**, and ensure `codex` is on `PATH`.
+Optional: **`CODEX_EXEC_EXTRA_ARGS=--full-auto`** if your **`codex exec --help`** lists it (do not add flags your CLI rejects).
 
-## Docker
+TLS for Duo: **`HTTP_SSL_VERIFY`**, **`SSL_CA_BUNDLE`** (`env.example`).
 
-The `Dockerfile` installs **`@openai/codex`** globally so `codex` is on `PATH`.
+## BDB MCP server / namespace — what you can adjust (server side)
 
-```bash
-docker build -t bdb-mcp-bridge .
-docker run --rm -p 8080:8080 ^
-  -e CLIENT_ID_BDB=... -e CLIENT_SECRET_BDB=... -e CODEX_API_KEY=... ^
-  bdb-mcp-bridge
-```
+Codex uses the same **streamable HTTP** MCP transport as the official Python sample (`streamablehttp_client` + session `initialize` → `list_tools` → `call_tool`). Your bridge already passes a **Bearer token** from **client ID + secret** (Duo OAuth) and optional **`X-Org-Id`** / **`X-User-Email`** via **`env_http_headers`**, matching typical BDB tenancy.
 
-## AWS App Runner
+On the **BDB / tool definition** side, things that help **every** client (including Codex) are:
 
-### Option A — Container from `Dockerfile` (Codex CLI included)
+1. **Tool `inputSchema`** — Clear **`properties`**, a correct **`required`** array (e.g. `org_id`), and **`additionalProperties: false`** where appropriate so models know exactly what to send.
+2. **Descriptions** — Short, action-oriented **`description`** text on each tool so routing models (including Codex) know *when* to call which tool.
+3. **OAuth / entitlements** — Confirm the **client-credentials** app used for BDB is allowed to call **this** MCP namespace and tools (scopes / allowlists if your platform has them).
+4. **Headers** — If the server requires tenancy, document which headers must be set (**`X-Org-Id`**, **`X-User-Email`**, etc.). This app maps request/env values into those headers for Codex.
+5. **Performance** — Keep **`initialize`** and **`tools/list`** fast enough for Codex defaults; tune **`MCP_STARTUP_TIMEOUT_SEC`** / **`MCP_TOOL_TIMEOUT_SEC`** here if BDB is slow.
+6. **URL** — No trailing spaces in the MCP base URL (easy mistake in samples).
+7. **Protocol** — Stay aligned with the **MCP streamable HTTP** spec your `mcp` Python package expects; Codex’s client must be able to complete **`initialize`** and list tools the same way your sample does.
 
-1. Build and push the image to ECR, or connect App Runner to **source** with **Dockerfile** as the build type.
-2. Set environment variables; use secrets for `CLIENT_SECRET_BDB` and `CODEX_API_KEY`.
-3. Health check: **`GET /health`**.
-4. Egress: Duo SSO, `scripts.cisco.com`, and OpenAI API endpoints used by Codex.
-
-### Option B — Managed **Python 3.11** runtime (GitHub source, no Docker)
-
-The App Runner Python **3.11** build image does **not** put `pip` on `PATH`. AWS documents using **`pip3`** and **`python3`** instead. See [Using the Python platform](https://docs.aws.amazon.com/apprunner/latest/dg/service-source-code-python.html).
-
-**Build command (console)** — same as [webex-cc-mcp](https://github.com/mdanylch/webex-cc-mcp):
-
-```text
-pip3 install -r requirements.txt
-```
-
-**Start command (console)** — use the repo’s shell wrapper (installs deps again at runtime, which avoids common Python 3.11 “revised build” issues):
-
-```text
-sh start.sh
-```
-
-Or commit the repo’s **`apprunner.yaml`** and set **Configuration source** to **Configuration file**.
-
-**If the build step still fails**, open the deployment **build log** in App Runner and find the **`pip`** error line (missing compiler, package build failure, etc.). This repo uses plain **`uvicorn`** (not `uvicorn[standard]`) to reduce native-extension failures on App Runner build hosts.
-
-**Important:** The managed Python runtime **does not include Node.js or Codex CLI**. The app **defaults to `ROUTER_MODE=openai_api`**. To use **Codex CLI**, deploy the **`Dockerfile`** (Option A) and set **`ROUTER_MODE=codex_cli`**.
-
-### Troubleshooting
-
-| Symptom | Likely cause |
-|--------|----------------|
-| `pip: command not found` | Use **`pip3 install -r requirements.txt`**, not `pip`. |
-| Codex / MCP failures on Python runtime | Set **`ROUTER_MODE=openai_api`** or switch to Dockerfile deployment. |
-| **Web ACL** error in the console | Often an IAM/console issue loading AWS WAF association for the service, or no WAF attached. If you are not using WAF on App Runner, it is usually safe to ignore; otherwise ensure your user/role has `wafv2:GetWebACL` (and related) permissions. |
-| **Application logs** empty / slow | Logs appear after a healthy instance is running. Failed builds or crashing tasks delay log groups; CloudWatch can lag by a minute or two. |
-| **HTTP 429** / `insufficient_quota` / `RateLimitError` from OpenAI | Your **API key has no remaining quota** or billing is not enabled. Top up at [OpenAI billing](https://platform.openai.com/account/billing) or use another key / org project. |
-
-### Testing on App Runner
-
-```bash
-curl -s https://YOUR-SERVICE.awsapprunner.com/health
-
-curl -s -X POST https://YOUR-SERVICE.awsapprunner.com/invoke ^
-  -H "Content-Type: application/json" ^
-  -d "{\"content\": \"Describe what you want the MCP tool to do\"}"
-```
-
-If **`parsed_jsonl`** is empty but Codex ran, you may be on a Codex build where JSONL and MCP interact oddly; track OpenAI Codex releases or temporarily set **`ROUTER_MODE=openai_api`**.
-
-## Access prerequisites
-
-1. Duo / BDB OAuth client credentials for the token URL.
-2. Correct **MCP URL** / namespace from BDB.
-3. **OpenAI API key** (or org-approved key) for **`codex exec`**.
-4. Confirm **header** names with BDB; adjust `app/codex_config.py` if they differ from `X-Org-Id` / `X-User-Email`.
-
-## Security
-
-- Do not log tokens or secrets; errors truncate stderr.
-- Treat `CLIENT_SECRET_BDB` and API keys as managed secrets.
+**Reality check:** If your **Python sample** (same token, same URL, same headers) successfully runs **`call_tool`**, the BDB endpoint is largely doing its job; **Codex `exec`** not calling tools is then mostly **Codex agent behavior / CLI version**, not something you fix only by changing BDB JSON. Improving **schemas and descriptions** still helps Codex choose tools when it *does* attempt tool use.

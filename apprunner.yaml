@@ -1,9 +1,8 @@
-# AWS App Runner — source repo config (Python 3.11 managed runtime).
-# https://docs.aws.amazon.com/apprunner/latest/dg/service-source-code-python.html
+# AWS App Runner — managed Python 3.11 does NOT include the Codex CLI (no Node/npm).
+# This app requires `codex` on PATH. Prefer deploying the Dockerfile in this repo, or install
+# Node + `npm install -g @openai/codex` in a custom build image.
 #
-# Python 3.11 uses the "revised" build: use pip3 / python3 (plain `pip` is not on PATH).
-#
-# Console mirror (Configuration source: API), matching webex-cc-mcp:
+# Console mirror (Configuration source: API):
 #   Build:  pip3 install -r requirements.txt
 #   Start:  sh start.sh
 #

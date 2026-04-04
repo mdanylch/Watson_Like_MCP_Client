@@ -1,4 +1,4 @@
-# Python app + Codex CLI (@openai/codex) for ROUTER_MODE=codex_cli (default).
+# Python API + Codex CLI (@openai/codex). Requires Node for `codex` on PATH.
 # AWS App Runner: expose PORT (default 8080).
 FROM node:20-bookworm-slim
 

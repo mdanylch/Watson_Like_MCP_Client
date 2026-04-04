@@ -28,6 +28,9 @@ def write_codex_mcp_config(
         "bearer_token_env_var": "BDB_MCP_BEARER_TOKEN",
         "required": True,
         "enabled": True,
+        # Streamable HTTP can be slow to connect or run tools; tune via env (see OpenAI Codex MCP docs)
+        "startup_timeout_sec": settings.mcp_startup_timeout_sec,
+        "tool_timeout_sec": settings.mcp_tool_timeout_sec,
     }
 
     env_headers: dict[str, str] = {}

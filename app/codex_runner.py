@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shlex
 import shutil
 import tempfile
 from pathlib import Path
@@ -15,14 +16,35 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
-CODEX_PROMPT_TEMPLATE = """You are working with Cisco BDB through Model Context Protocol.
-An MCP server is preconfigured for this session under the name "{server_name}" (streamable HTTP to Cisco scripts).
 
-Complete the user's task using the MCP tools from that server when they are relevant. Call tools as needed; do not invent tool results.
+def _build_codex_prompt(
+    server_name: str,
+    content: str,
+    org_id: str | None,
+    user_email: str | None,
+) -> str:
+    """Prompt for `codex exec` — tool use depends on Codex + MCP session (see README troubleshooting)."""
+    lines: list[str] = [
+        f'You are using Cisco BDB via Model Context Protocol. The MCP server "{server_name}" is configured for this session.',
+        "",
+        "Instructions:",
+        "- Use MCP tools from that server when the user task requires data or actions only those tools provide.",
+        "- Call a tool with valid JSON arguments when the tool schema requires fields (e.g. org_id).",
+        "- Use only real tool results; do not invent tool output.",
+        "- After tools return, give a short summary for the user.",
+    ]
+    ctx: list[str] = []
+    if org_id:
+        ctx.append(f"org_id: {org_id}")
+    if user_email:
+        ctx.append(f"user_email: {user_email}")
+    if ctx:
+        lines.extend(
+            ["", "Request context — pass these in tool arguments when required:", *(f"- {c}" for c in ctx), ""]
+        )
 
-User task:
-{content}
-"""
+    lines.extend(["User task:", content.strip()])
+    return "\n".join(lines)
 
 
 def _find_codex_binary(settings: Settings) -> str:
@@ -47,7 +69,6 @@ def _codex_env(
 ) -> dict[str, str]:
     env = os.environ.copy()
     env["HOME"] = str(codex_home)
-    # Primary automation auth for `codex exec` (see OpenAI non-interactive docs)
     key = settings.openai_api_key
     env["CODEX_API_KEY"] = key
     env["OPENAI_API_KEY"] = key
@@ -71,8 +92,6 @@ async def invoke_codex_mcp_pipeline(
 ) -> dict[str, Any]:
     """
     OAuth token → write Codex MCP config → `codex exec --json` with BDB MCP available.
-
-    Codex connects to streamable HTTP using config.toml; see Codex MCP docs.
     """
     token = await fetch_client_credentials_token(settings)
     codex_bin = _find_codex_binary(settings)
@@ -80,18 +99,24 @@ async def invoke_codex_mcp_pipeline(
     tmp = Path(tempfile.mkdtemp(prefix="codex-mcp-bridge-"))
     try:
         write_codex_mcp_config(tmp, settings, org_id=org_id, user_email=user_email)
-        prompt = CODEX_PROMPT_TEMPLATE.format(server_name=settings.codex_mcp_server_name, content=content)
+        prompt = _build_codex_prompt(
+            settings.codex_mcp_server_name,
+            content,
+            org_id,
+            user_email,
+        )
 
+        extra: list[str] = []
+        raw = (settings.codex_exec_extra_args or "").strip()
+        if raw:
+            extra = shlex.split(raw, posix=os.name != "nt")
         cmd = [
             codex_bin,
             "exec",
             "--skip-git-repo-check",
             "--ephemeral",
             "--json",
-            "--ask-for-approval",
-            "never",
-            "--sandbox",
-            settings.codex_sandbox,
+            *extra,
             prompt,
         ]
 

@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
-from openai import APIConnectionError, AuthenticationError, RateLimitError
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -34,8 +33,7 @@ def _deepest_cause(exc: BaseException) -> BaseException:
 async def lifespan(app: FastAPI):
     s = get_settings()
     logger.info(
-        "Startup: ROUTER_MODE=%s HTTP_SSL_VERIFY=%s SSL_CA_BUNDLE=%s",
-        s.router_mode,
+        "Startup: Codex CLI bridge HTTP_SSL_VERIFY=%s SSL_CA_BUNDLE=%s",
         s.http_ssl_verify,
         "(path set)" if s.ssl_ca_bundle else "(none)",
     )
@@ -119,8 +117,7 @@ async def invoke(body: InvokeRequest, settings: Settings = Depends(get_settings)
         )
         raise HTTPException(status_code=502, detail=detail) from e
     except RuntimeError as e:
-        logger.warning("MCP or router error: %s", e)
-        # Always surface RuntimeError text (e.g. Codex missing); add traceback when EXPOSE_ERROR_DETAILS=1
+        logger.warning("Codex or upstream error: %s", e)
         if settings.expose_error_details:
             detail: str | dict[str, Any] = _detail_payload(
                 settings, status_code=502, public_message=str(e), exc=e
@@ -130,31 +127,6 @@ async def invoke(body: InvokeRequest, settings: Settings = Depends(get_settings)
         raise HTTPException(status_code=502, detail=detail) from e
     except Exception as e:
         root = _deepest_cause(e)
-        if isinstance(root, RateLimitError):
-            logger.warning("OpenAI rate limit / quota: %s", root)
-            pub = (
-                "OpenAI API returned 429 (rate limit or insufficient quota). "
-                "Add billing/credits or use a key with available quota: "
-                "https://platform.openai.com/account/billing"
-            )
-            raise HTTPException(
-                status_code=429,
-                detail=_detail_payload(settings, status_code=429, public_message=pub, exc=e),
-            ) from e
-        if isinstance(root, AuthenticationError):
-            logger.warning("OpenAI authentication failed: %s", root)
-            pub = "OpenAI API rejected the API key (invalid or revoked). Check OPENAI_API_KEY / CODEX_API_KEY."
-            raise HTTPException(
-                status_code=401,
-                detail=_detail_payload(settings, status_code=401, public_message=pub, exc=e),
-            ) from e
-        if isinstance(root, APIConnectionError):
-            logger.warning("OpenAI connection error: %s", root)
-            pub = "Could not reach OpenAI API (network or TLS). Check connectivity and SSL settings."
-            raise HTTPException(
-                status_code=502,
-                detail=_detail_payload(settings, status_code=502, public_message=pub, exc=e),
-            ) from e
         logger.exception("invoke failed (root cause: %s: %s)", type(root).__name__, root)
         detail = _detail_payload(
             settings,

@@ -49,6 +49,11 @@ def parse_codex_exec_jsonl(stdout: str) -> dict[str, Any]:
         if itype == "mcp_tool_call":
             # Include success and failure (`item.status` completed | failed); see Codex JSONL cheatsheet.
             mcp_calls.append(item)
+        elif isinstance(itype, str) and "tool" in itype.lower() and (
+            "call" in itype.lower() or itype in ("tool_call", "mcp_call", "function_call")
+        ):
+            # Some Codex builds use alternate item.type labels for the same idea.
+            mcp_calls.append(item)
         elif itype == "agent_message":
             text = item.get("text")
             if isinstance(text, str) and text.strip():

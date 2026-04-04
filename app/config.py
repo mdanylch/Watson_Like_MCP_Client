@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from typing import Literal
-
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -23,52 +21,50 @@ class Settings(BaseSettings):
     client_id_bdb: str = Field(validation_alias="CLIENT_ID_BDB")
     client_secret_bdb: str = Field(validation_alias="CLIENT_SECRET_BDB")
 
-    # MCP server (streamable HTTP)
+    # MCP server (streamable HTTP) — used in Codex ~/.codex/config.toml
     mcp_base_url: str = Field(
         default="https://scripts.cisco.com/api/v2/mcp/namespace/wxcc_mcp_2",
         validation_alias="MCP_BASE_URL",
+    )
+    mcp_startup_timeout_sec: int = Field(
+        default=45,
+        ge=5,
+        le=300,
+        validation_alias="MCP_STARTUP_TIMEOUT_SEC",
+        description="Seconds for Codex to connect to streamable HTTP MCP (config.toml startup_timeout_sec).",
+    )
+    mcp_tool_timeout_sec: int = Field(
+        default=120,
+        ge=10,
+        le=600,
+        validation_alias="MCP_TOOL_TIMEOUT_SEC",
+        description="Seconds per MCP tool call (config.toml tool_timeout_sec).",
     )
 
     # Optional org / user context for upstream headers (if your BDB contract requires them)
     org_id: str | None = Field(default=None, validation_alias="ORG_ID")
     user_email: str | None = Field(default=None, validation_alias="USER_EMAIL")
 
-    # API key: used by Codex CLI (`codex exec` / `CODEX_API_KEY`) and by optional OpenAI-router mode
+    # Passed to ``codex exec`` as CODEX_API_KEY / OPENAI_API_KEY (see OpenAI Codex docs)
     openai_api_key: str = Field(
         validation_alias=AliasChoices("CODEX_API_KEY", "OPENAI_API_KEY", "API_KEY_LLM"),
-        description="Set in App Runner secrets; Codex exec uses CODEX_API_KEY per OpenAI docs.",
     )
-    openai_base_url: str | None = Field(default=None, validation_alias="OPENAI_BASE_URL")
-    router_model: str = Field(default="gpt-4o-mini", validation_alias="ROUTER_MODEL")
 
-    # codex_cli needs the Codex binary (e.g. Dockerfile). App Runner managed Python has no Node/npm — use openai_api there.
-    router_mode: Literal["codex_cli", "openai_api"] = Field(
-        default="openai_api",
-        validation_alias="ROUTER_MODE",
-    )
     codex_binary: str = Field(default="codex", validation_alias="CODEX_BINARY")
     codex_mcp_server_name: str = Field(default="bdb_wxcc", validation_alias="CODEX_MCP_SERVER_NAME")
     codex_exec_timeout_sec: int = Field(default=600, validation_alias="CODEX_EXEC_TIMEOUT_SEC")
-    codex_sandbox: Literal["read-only", "workspace-write", "danger-full-access"] = Field(
-        default="read-only",
-        validation_alias="CODEX_SANDBOX",
-    )
+    # Extra flags for `codex exec` (space-separated). See `codex exec --help` on your machine.
+    # Example (newer CLIs): --full-auto   or   --ask-for-approval never
+    codex_exec_extra_args: str = Field(default="", validation_alias="CODEX_EXEC_EXTRA_ARGS")
 
     # HTTP server
     host: str = Field(default="0.0.0.0", validation_alias="HOST")
     port: int = Field(default=8080, validation_alias="PORT")
 
-    # Behavior
-    assistant_followup: bool = Field(
-        default=True,
-        validation_alias="ASSISTANT_FOLLOWUP",
-        description="If true, run a second LLM call to summarize tool results in natural language.",
-    )
-
-    # When true, /invoke returns exception type + message in JSON (for local/debug). Turn off in untrusted production.
+    # When true, /invoke returns exception type + message in JSON (for local/debug)
     expose_error_details: bool = Field(default=False, validation_alias="EXPOSE_ERROR_DETAILS")
 
-    # TLS for httpx (Duo token, MCP streamable HTTP, OpenAI). Corporate SSL inspection often needs a PEM bundle.
+    # TLS for httpx (Duo token fetch). Corporate SSL inspection often needs a PEM bundle.
     http_ssl_verify: bool = Field(default=True, validation_alias="HTTP_SSL_VERIFY")
     ssl_ca_bundle: str | None = Field(
         default=None,

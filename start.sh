@@ -1,6 +1,6 @@
 #!/bin/sh
-# App Runner (Python 3.11): same pattern as webex-cc-mcp — install at runtime so deps
-# land in the run image; then start uvicorn.
+# App Runner (Python 3.11): install deps at runtime, then uvicorn.
+# This app requires `codex` on PATH — use the repo Dockerfile or install @openai/codex in the image.
 set -e
 pip3 install --no-cache-dir -r requirements.txt
 PORT="${PORT:-8080}"
