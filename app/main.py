@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import traceback
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -18,7 +19,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="BDB MCP Bridge", version="0.1.0")
+
+def _deepest_cause(exc: BaseException) -> BaseException:
+    """Unwrap ExceptionGroup (e.g. MCP TaskGroup) to a leaf exception for clearer messages."""
+    if isinstance(exc, BaseExceptionGroup):
+        if not exc.exceptions:
+            return exc
+        return _deepest_cause(exc.exceptions[0])
+    return exc
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    s = get_settings()
+    logger.info(
+        "Startup: ROUTER_MODE=%s HTTP_SSL_VERIFY=%s SSL_CA_BUNDLE=%s",
+        s.router_mode,
+        s.http_ssl_verify,
+        "(path set)" if s.ssl_ca_bundle else "(none)",
+    )
+    if s.http_ssl_verify:
+        logger.info(
+            "TLS: verification ON. If CERTIFICATE_VERIFY_FAILED appears, set HTTP_SSL_VERIFY=false "
+            "or SSL_CA_BUNDLE in the **server** environment, then restart uvicorn — not only in the client shell."
+        )
+    yield
+
+
+app = FastAPI(title="BDB MCP Bridge", version="0.1.0", lifespan=lifespan)
 
 
 class InvokeRequest(BaseModel):
@@ -45,8 +73,12 @@ def _detail_payload(
     if extra:
         out.update(extra)
     if exc is not None:
+        root = _deepest_cause(exc)
         out["exception_type"] = type(exc).__name__
         out["exception_message"] = str(exc)
+        if root is not exc:
+            out["root_cause_type"] = type(root).__name__
+            out["root_cause_message"] = str(root)
         out["traceback"] = traceback.format_exc()
     return out
 
@@ -96,7 +128,8 @@ async def invoke(body: InvokeRequest, settings: Settings = Depends(get_settings)
             detail = str(e)
         raise HTTPException(status_code=502, detail=detail) from e
     except Exception as e:
-        logger.exception("invoke failed")
+        root = _deepest_cause(e)
+        logger.exception("invoke failed (root cause: %s: %s)", type(root).__name__, root)
         detail = _detail_payload(
             settings,
             status_code=500,

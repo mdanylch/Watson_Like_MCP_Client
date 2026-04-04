@@ -85,6 +85,8 @@ $env:EXPOSE_ERROR_DETAILS = "true"   # optional: full error JSON in responses wh
 - Point **`SSL_CA_BUNDLE`** at a PEM that includes your org’s root (and public CAs if needed), or  
 - For quick local testing only: **`$env:HTTP_SSL_VERIFY = "false"`** (insecure; do not use in production).
 
+**Important:** `HTTP_SSL_VERIFY` must be set in the **same environment as the uvicorn process**. Setting it only in the PowerShell window where you run **`Invoke-RestMethod`** does **nothing** for the server. Either: (1) stop uvicorn, run `$env:HTTP_SSL_VERIFY = "false"`, start uvicorn again in **that** window; or (2) put `HTTP_SSL_VERIFY=false` in a **`.env`** file in the project root (loaded when the app starts). On startup, logs show **`HTTP_SSL_VERIFY=...`** so you can confirm.
+
 **4. Start the API** (from repo root, venv active):
 
 ```powershell
